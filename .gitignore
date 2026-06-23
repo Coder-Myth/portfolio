@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Environment variables (SECRETS — never commit!)
+.env
+
+# SQL setup (one-time use, already applied)
+*.sql
+
+# Logs
+*.log
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
