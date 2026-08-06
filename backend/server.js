@@ -6,7 +6,21 @@ require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 
 // ─── Initialize Supabase ───────────────────────────────────────────────────────
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ SUPABASE_URL or SUPABASE_ANON_KEY is missing in .env!');
+}
+
+// Validate key format (supports both legacy JWT 'eyJ...' and new 'sb_publishable_...' format)
+if (supabaseKey && !supabaseKey.startsWith('eyJ') && !supabaseKey.startsWith('sb_')) {
+  console.error('❌ SUPABASE_ANON_KEY does not look like a valid Supabase key!');
+  console.error('   → It should start with "eyJ" (legacy) or "sb_publishable_" (new format).');
+  console.error('   → Go to Supabase Dashboard → Settings → API → copy the anon/publishable key.');
+}
+
+const supabase = createClient(supabaseUrl || '', supabaseKey || '');
 
 // ─── Initialize Express ────────────────────────────────────────────────────────
 const app = express();
@@ -255,9 +269,19 @@ app.post('/api/submit-proposal', async (req, res) => {
       .select();
 
     if (error) {
-      console.error('❌ Supabase insert error:', error);
+      console.error('❌ Supabase insert error:', JSON.stringify(error, null, 2));
+      console.error('   → Error message:', error.message);
+      console.error('   → Error code:', error.code);
+      console.error('   → Error hint:', error.hint);
+      console.error('   → Error details:', error.details);
       return res.status(500).json({
         error: 'Failed to save your proposal. Please try again or contact directly.',
+        // Include debug info (remove in production if desired)
+        debug: {
+          message: error.message,
+          code: error.code,
+          hint: error.hint,
+        },
       });
     }
 
@@ -291,14 +315,31 @@ app.get('/api/health', (req, res) => {
 });
 
 // ─── Start Server ───────────────────────────────────────────────────────────────
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log('');
   console.log('╔══════════════════════════════════════════════╗');
   console.log('║   🚀 Portfolio Backend v2.0                 ║');
   console.log(`║   Running on port ${PORT}                    ║`);
   console.log('║                                              ║');
-  console.log(`║   Supabase:  ${process.env.SUPABASE_URL ? '✅ Connected' : '❌ Not configured'}               ║`);
+  console.log(`║   Supabase:  ${supabaseUrl ? '✅ URL set' : '❌ Not configured'}                  ║`);
+  console.log(`║   API Key:   ${supabaseKey && supabaseKey.startsWith('eyJ') ? '✅ Valid JWT' : '❌ Invalid key'}                 ║`);
   console.log(`║   Email:     ${transporter ? '✅ Gmail ready' : '⚠️  Not configured'}              ║`);
   console.log('╚══════════════════════════════════════════════╝');
   console.log('');
+
+  // Verify Supabase connectivity on startup
+  try {
+    const { data, error } = await supabase
+      .from('project_requests')
+      .select('id')
+      .limit(1);
+    if (error) {
+      console.error('❌ Supabase connection test FAILED:', error.message);
+      console.error('   → Code:', error.code, '| Hint:', error.hint);
+    } else {
+      console.log('✅ Supabase connection verified — project_requests table is accessible.');
+    }
+  } catch (err) {
+    console.error('❌ Supabase connection test threw an exception:', err.message);
+  }
 });
